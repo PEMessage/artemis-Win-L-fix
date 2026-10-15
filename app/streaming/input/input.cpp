@@ -5,6 +5,10 @@
 #include "path.h"
 #include "utils.h"
 
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+#include "win_keyboard_hook.h"
+#endif
+
 #include <QtGlobal>
 #include <QDir>
 #include <QGuiApplication>
@@ -202,10 +206,22 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     SDL_zero(m_LastTouchDownEvent);
     SDL_zero(m_LastTouchUpEvent);
     SDL_zero(m_TouchDownEvent);
+
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+    // Let the Windows keyboard hook use the very same condition as the normal
+    // input path, so it stops capturing as soon as system key capture goes away
+    // (for example when the window loses focus while fullscreen).
+    WinKeyboardHook::setCaptureCheck([this]() { return isSystemKeyCaptureActive(); });
+#endif
 }
 
 SdlInputHandler::~SdlInputHandler()
 {
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+    WinKeyboardHook::uninstall();
+    WinKeyboardHook::setCaptureCheck(nullptr);
+#endif
+
     for (int i = 0; i < MAX_GAMEPADS; i++) {
         if (m_GamepadState[i].mouseEmulationTimer != 0) {
             Session::get()->notifyMouseEmulationMode(false);
@@ -323,6 +339,9 @@ bool SdlInputHandler::isCaptureActive()
 void SdlInputHandler::updateKeyboardGrabState()
 {
     if (m_CaptureSystemKeysMode == StreamingPreferences::CSK_OFF) {
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+        WinKeyboardHook::uninstall();
+#endif
         return;
     }
 
@@ -341,6 +360,20 @@ void SdlInputHandler::updateKeyboardGrabState()
     // On SDL 2.0.15+, we can get keyboard-only grab on Win32, X11, and Wayland.
     // SDL 2.0.18 adds keyboard grab on macOS (if built with non-AppStore APIs).
     SDL_SetWindowKeyboardGrab(m_Window, shouldGrab ? SDL_TRUE : SDL_FALSE);
+
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+    // On Windows, SDL's keyboard grab only swallows Win/Alt/Ctrl/Tab/Esc and lets
+    // every other key through to Windows. Windows consumes Win+<key> system
+    // hotkeys (e.g. Win+L) before they reach the window, so we install our own
+    // low-level hook afterwards (so it is dispatched first) to capture and
+    // forward those combinations ourselves.
+    if (shouldGrab) {
+        WinKeyboardHook::install();
+    }
+    else {
+        WinKeyboardHook::uninstall();
+    }
+#endif
 #endif
 }
 

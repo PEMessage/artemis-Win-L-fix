@@ -405,6 +405,11 @@ win32 {
     HEADERS += streaming/video/ffmpeg-renderers/dxutil.h
 }
 win32:!winrt {
+    DEFINES += HAVE_WIN_KEYBOARD_HOOK
+    SOURCES += streaming/input/win_keyboard_hook.cpp
+    HEADERS += streaming/input/win_keyboard_hook.h
+}
+win32:!winrt {
     message(DXVA2 and D3D11VA renderers selected)
 
     SOURCES += \

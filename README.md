@@ -2,6 +2,29 @@
 
 [Artemis Qt](https://github.com/wjbeckett/artemis) is an enhanced cross-platform client for NVIDIA GameStream and [Apollo](https://github.com/ClassicOldSong/Apollo)/[Sunshine](https://github.com/LizardByte/Sunshine) servers. It brings the advanced features from [Artemis Android](https://github.com/ClassicOldSong/moonlight-android) to desktop platforms.
 
+## About this fork
+
+> **This is a personal fork of [wjbeckett/artemis](https://github.com/wjbeckett/artemis).** It fixes forwarding the Windows key and `Win+<key>` combinations (including `Win+L`) to the host while streaming from a Windows client.
+
+### Why `Win+L` doesn't reach the host from Artemis
+
+Windows processes `Win+L` itself. While the local lock is enabled it locks the client; even with the lock disabled, the `L` is consumed by Windows' hotkey handling and is **not posted to the window**, so a client that reads ordinary keys through the normal window-message path never receives the `L`.
+
+Deskflow/Barrier can capture it because they read keys in their **own** low-level keyboard hook (`WH_KEYBOARD_LL`) and swallow the event before Windows sees it (`setMode(kHOOK_RELAY_EVENTS)` eats every key). Artemis relies on SDL's keyboard grab, which only swallows `Win`/`Alt`/`Ctrl`/`Tab`/`Esc` and passes `L` straight through to Windows.
+
+### The fix
+
+`app/streaming/input/win_keyboard_hook.cpp` installs a second `WH_KEYBOARD_LL` hook *after* SDL installs its grab hook, so it is dispatched first. While the Windows key is held it swallows the other key, forwards it to the host with `LiSendKeyboardEvent2()`, and always sends the matching key-up. The Windows key itself is still handled by the normal (SDL) input path.
+
+### What you still need to do
+
+- In Artemis: *Settings → **Capture system keyboard shortcuts** → **always***. The Windows key is only forwarded while system-key capture is active.
+- If Windows still locks the client on `Win+L`, disable the local lock (the hook normally swallows the `L` first, so this is usually no longer needed):
+  - Group Policy: *User Configuration → Administrative Templates → System → Ctrl+Alt+Del Options → **Remove Lock Computer***
+  - or registry: `HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System` → `DisableLockWorkstation` = `1`
+
+> `Ctrl+Alt+Del` is in the same reserved class and can never be captured or forwarded.
+
 ## 🙏 Attribution
 
 Artemis Qt is built upon the excellent foundation of [**Moonlight Qt**](https://github.com/moonlight-stream/moonlight-qt) by the [Moonlight Team](https://github.com/moonlight-stream). We extend our sincere gratitude to the original developers for creating such a robust and well-architected streaming client.
