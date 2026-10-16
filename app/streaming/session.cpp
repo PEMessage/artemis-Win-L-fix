@@ -2266,6 +2266,10 @@ void Session::execInternal()
                 if (m_Preferences->muteOnFocusLoss) {
                     m_AudioMuted = false;
                 }
+
+                // SDL re-installs its keyboard grab hook on focus gain, so make
+                // sure our system key hook is dispatched first again.
+                m_InputHandler->notifyFocusGained();
                 break;
             case SDL_WINDOWEVENT_LEAVE:
                 m_InputHandler->notifyMouseLeave();

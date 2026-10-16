@@ -369,13 +369,17 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
                 keyCode = 0xA5;
                 break;
             case SDL_SCANCODE_LGUI:
-                if (!isSystemKeyCaptureActive()) {
+                // Only forward the Windows key while we're capturing system keys,
+                // but always deliver the key-up if we may have sent a key-down.
+                // Otherwise the host is left with a stuck Windows key after e.g.
+                // the window loses focus while the key is held down.
+                if (event->state == SDL_PRESSED && !isSystemKeyCaptureActive()) {
                     return;
                 }
                 keyCode = 0x5B;
                 break;
             case SDL_SCANCODE_RGUI:
-                if (!isSystemKeyCaptureActive()) {
+                if (event->state == SDL_PRESSED && !isSystemKeyCaptureActive()) {
                     return;
                 }
                 keyCode = 0x5C;

@@ -313,6 +313,14 @@ void SdlInputHandler::notifyMouseLeave()
 
 void SdlInputHandler::notifyFocusLost()
 {
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+    // Release the Windows key and any keys captured by our hook. Focus can be
+    // lost mid-combination (e.g. Win+L locking the remote host, or Alt+Tab), and
+    // the key-up may never be delivered to us, which would leave the host with
+    // stuck keys.
+    WinKeyboardHook::releaseKeys();
+#endif
+
     // Release mouse cursor when another window is activated (e.g. by using ALT+TAB).
     // This lets user to interact with our window's title bar and with the buttons in it.
     // Doing this while the window is full-screen breaks the transition out of FS
@@ -336,6 +344,18 @@ bool SdlInputHandler::isCaptureActive()
     return m_FakeCaptureActive;
 }
 
+void SdlInputHandler::notifyFocusGained()
+{
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+    // SDL re-installs its own keyboard grab hook whenever the window regains
+    // focus (see SDL_UpdateWindowGrab()), which would leave SDL's hook in front
+    // of ours. Then SDL would swallow the Windows key before we ever see it, and
+    // Win+<key> combinations (e.g. Win+L) would leak to Windows. Re-install our
+    // hook so it is dispatched first again.
+    WinKeyboardHook::reinstall();
+#endif
+}
+
 void SdlInputHandler::updateKeyboardGrabState()
 {
     if (m_CaptureSystemKeysMode == StreamingPreferences::CSK_OFF) {
@@ -357,6 +377,16 @@ void SdlInputHandler::updateKeyboardGrabState()
     SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, shouldGrab ? "1" : "0");
 
 #if SDL_VERSION_ATLEAST(2, 0, 15)
+#ifdef HAVE_WIN_KEYBOARD_HOOK
+    // Remove our hook *before* SDL releases its grab. Otherwise there would be a
+    // window where our hook is installed but SDL's is not, and in that window
+    // the Windows key would reach Windows; if capture came back before the
+    // key-up was released, Windows would be left with a stuck Windows key.
+    if (!shouldGrab) {
+        WinKeyboardHook::uninstall();
+    }
+#endif
+
     // On SDL 2.0.15+, we can get keyboard-only grab on Win32, X11, and Wayland.
     // SDL 2.0.18 adds keyboard grab on macOS (if built with non-AppStore APIs).
     SDL_SetWindowKeyboardGrab(m_Window, shouldGrab ? SDL_TRUE : SDL_FALSE);
@@ -365,13 +395,10 @@ void SdlInputHandler::updateKeyboardGrabState()
     // On Windows, SDL's keyboard grab only swallows Win/Alt/Ctrl/Tab/Esc and lets
     // every other key through to Windows. Windows consumes Win+<key> system
     // hotkeys (e.g. Win+L) before they reach the window, so we install our own
-    // low-level hook afterwards (so it is dispatched first) to capture and
-    // forward those combinations ourselves.
+    // low-level hook afterwards (so it is dispatched first) to take over the
+    // Windows key and forward those combinations ourselves.
     if (shouldGrab) {
         WinKeyboardHook::install();
-    }
-    else {
-        WinKeyboardHook::uninstall();
     }
 #endif
 #endif
