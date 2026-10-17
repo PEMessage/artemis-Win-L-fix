@@ -374,12 +374,16 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
                 // Otherwise the host is left with a stuck Windows key after e.g.
                 // the window loses focus while the key is held down.
                 if (event->state == SDL_PRESSED && !isSystemKeyCaptureActive()) {
+                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                                "SDL Windows key: drop down (system key capture inactive)");
                     return;
                 }
                 keyCode = 0x5B;
                 break;
             case SDL_SCANCODE_RGUI:
                 if (event->state == SDL_PRESSED && !isSystemKeyCaptureActive()) {
+                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                                "SDL Windows key: drop down (system key capture inactive)");
                     return;
                 }
                 keyCode = 0x5C;
@@ -470,6 +474,13 @@ void SdlInputHandler::handleKeyEvent(SDL_KeyboardEvent* event)
     }
     else {
         m_KeysDown.remove(keyCode);
+    }
+
+    if (keyCode == 0x5B || keyCode == 0x5C) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "SDL Windows key: forward %s (vk=0x%04X)",
+                    event->state == SDL_PRESSED ? "down" : "up",
+                    (unsigned int)(0x8000 | keyCode));
     }
 
     LiSendKeyboardEvent2(0x8000 | keyCode,

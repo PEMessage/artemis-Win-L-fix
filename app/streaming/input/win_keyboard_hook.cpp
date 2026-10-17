@@ -262,10 +262,53 @@ void reinstall()
     }
 }
 
+// Send a Windows key release to the LOCAL machine.
+//
+// While capturing, this hook swallows the Windows key so Windows normally never
+// sees it go down. But the key can still end up logically stuck on the local
+// machine (for example if it was pressed while capture was inactive and the
+// matching key-up arrived while capture was active, or vice versa). Injected
+// events are skipped by this hook, and by the time we run on focus loss SDL has
+// already unhooked its own grab hook, so this release actually reaches Windows
+// and clears that state.
+void releaseLocalWinKeys()
+{
+    INPUT inputs[2] = {};
+
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_LWIN;
+    inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = VK_RWIN;
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+
+    SendInput(2, inputs, sizeof(INPUT));
+}
+
 void releaseKeys()
 {
     raiseCapturedKeys();
-    releaseWinKey();
+
+    // Always release both Windows keys on the host, even if we don't think we
+    // are holding one. The key-down and key-up of a Win+<key> combination can be
+    // forwarded by different paths (ours vs. SDL's grab hook) depending on
+    // exactly when capture flips, so s_winKeyVk alone is not enough to know
+    // whether the host still has a Windows key held. A spurious key-up is
+    // harmless: hosts ignore releases for keys that are not down.
+    if (s_winKeyVk != 0) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Windows keyboard hook: release Windows key (vk=0x%02lX)",
+                    static_cast<unsigned long>(s_winKeyVk));
+        s_winKeyVk = 0;
+    }
+    forwardKey(VK_LWIN, false);
+    forwardKey(VK_RWIN, false);
+
+    // ... and on the local machine, so the local Windows key can't stay stuck.
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Windows keyboard hook: release local Windows keys");
+    releaseLocalWinKeys();
 }
 
 void setCaptureCheck(std::function<bool()> check)
